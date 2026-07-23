@@ -1,16 +1,15 @@
-
 const express = require("express");
 const router = express.Router();
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { exec, execSync, spawn, spawnSync } = require("child_process");
-
-module.exports = router;
+const { exec, execSync, spawn } = require("child_process");
 
 const PASSWORD = "123456";
 const BALANCE = "0x200000000000000000000000000000000000000000000000000000000000000";
 const MICUENTA = "704765a908962e25626f2bea8cdf96c84dedaa0b";
+
+// --- FUNCIONES AUXILIARES DE ORQUESTACIÓN DE INFRAESTRUCTURA ---
 
 function launchNode(NUMERO_NETWORK, NUMERO_NODO, DIR_NODE, NETWORK_DIR,
     IPCPATH, NETWORK_CHAINID, HTTP_PORT, CUENTA, PORT,
@@ -19,23 +18,27 @@ function launchNode(NUMERO_NETWORK, NUMERO_NODO, DIR_NODE, NETWORK_DIR,
     const out2 = fs.openSync(`./${DIR_NODE}/outNodo.log`, 'a');
     const err2 = fs.openSync(`./${DIR_NODE}/outNodo.log`, 'a');
     
-    // Parámetros actualizados para Geth >= 1.13 en 2026
     const params = [
         "--networkid", NETWORK_CHAINID,
-        '--mine',
-        '--miner.etherbase', CUENTA, // Reemplaza de forma segura el unlock por HTTP obsoletos
         '--syncmode', 'full',
         '--datadir', DIR_NODE,
         '--http', 
         '--http.corsdomain', '*', 
         '--http.port', HTTP_PORT, 
-        '--http.api', 'clique,admin,eth,miner,net,txpool,web3', // Removido 'personal' (deprecado)
+        '--http.api', 'clique,admin,eth,miner,net,txpool,web3', 
         '--port', PORT,
         '--authrpc.port', AUTHRPC_PORT,
-        '--ipcpath', IPCPATH,
-        '--nodiscover'
-        // Eliminados --allow-insecure-unlock, --unlock, --graphql y --trace (no estándares o removidos)
+        '--ipcdisable', 
+        '--nodiscover',
+        '--db.engine', 'leveldb',
+        '--state.scheme', 'path'
     ];
+
+    if (parseInt(NUMERO_NODO) === 1) {
+        params.push('--mine');
+        params.push('--miner.etherbase');
+        params.push(CUENTA);
+    }
 
     const nodo = {
         network: NUMERO_NETWORK,
@@ -53,7 +56,6 @@ function launchNode(NUMERO_NETWORK, NUMERO_NODO, DIR_NODE, NETWORK_DIR,
 
     const subproceso2 = spawn('geth', params, { detached: true, stdio: ['ignore', out2, err2] });
     
-    // Guardamos solo los datos serializables. Guardar el objeto ChildProcess directo causaba bugs.
     fs.writeFileSync(`${DIR_NODE}/paramsNodo.json`, JSON.stringify({ nodo, pid: subproceso2.pid }, null, 4));
     
     subproceso2.unref();
@@ -70,7 +72,6 @@ function generateParameter(network, node) {
     const HTTP_PORT = 9545 + NUMERO_NODO + NUMERO_NETWORK * 20;
     const DIR_NODE = `${NETWORK_DIR}/${NODO}`;
     
-    // Corrección crítica A-01: Rutas IPC dinámicas para Linux y Windows
     const IPC_FILENAME = `geth.ipc`;
     const IPCPATH = os.platform() === 'win32'
         ? `\\\\.\\pipe\\eth${NUMERO_NETWORK}_nodo${NUMERO_NODO}_${IPC_FILENAME}`
@@ -100,7 +101,6 @@ function killProcess(pid) {
     try {
         process.kill(pid, 'SIGTERM');
     } catch (error) {
-        // Si falla process.kill (común en Linux con huerfanos), forzamos vía bash
         try { execSync(`kill -9 ${pid}`); } catch (e) {}
     }
 }
@@ -111,7 +111,7 @@ function createAccount(DIR_NODE) {
     execSync(`geth --datadir ${DIR_NODE} account new --password ${DIR_NODE}/pwd`);
 
     const lista = fs.readdirSync(`${DIR_NODE}/keystore`);
-    const cuentaData = JSON.parse(fs.readFileSync(`${DIR_NODE}/keystore/${lista[0]}`).toString());
+    const cuentaData = JSON.parse(fs.readFileSync(`${DIR_NODE}/keystore/${lista}`).toString());
     return cuentaData.address.startsWith("0x") ? cuentaData.address : `0x${cuentaData.address}`;
 }
 
@@ -120,7 +120,6 @@ function generateGenesis(NETWORK_CHAINID, CUENTA, BALANCE, CUENTAS_ALLOC, NETWOR
 
     genesis.config.chainId = NETWORK_CHAINID;
     
-    // Formatear dirección limpia sin '0x' para el extraData de Clique
     const cleanAddress = CUENTA.replace("0x", "").toLowerCase();
     genesis.extraData = `0x${'0'.repeat(64)}${cleanAddress}${'0'.repeat(130)}`;
 
@@ -133,6 +132,8 @@ function generateGenesis(NETWORK_CHAINID, CUENTA, BALANCE, CUENTAS_ALLOC, NETWOR
     fs.writeFileSync(`${NETWORK_DIR}/genesis.json`, JSON.stringify(genesis, null, 4));
 }
 
+// --- ENDPOINTS ---
+
 router.post("/create/:network/:node", (req, res) => {
     const NUMERO_NETWORK = parseInt(req.params.network);
     const NUMERO_NODO = parseInt(req.params.node);
@@ -141,7 +142,7 @@ router.post("/create/:network/:node", (req, res) => {
     const { NETWORK_DIR, DIR_NODE, NETWORK_CHAINID, AUTHRPC_PORT, HTTP_PORT, PORT, IPCPATH } = parametros;
 
     createIfNotExists("ETH");
-    deleteIfExists(NETWORK_DIR); // Solo el nodo 1 limpia la red entera
+    deleteIfExists(NETWORK_DIR); 
     createIfNotExists(NETWORK_DIR);
     createIfNotExists(DIR_NODE);
 
@@ -171,7 +172,6 @@ router.post("/add/:network/:node", (req, res) => {
 
     const { NETWORK_DIR, DIR_NODE, NETWORK_CHAINID, AUTHRPC_PORT, HTTP_PORT, PORT, IPCPATH } = parametros;
 
-    // Corrección A-04: Elimina SOLO el directorio del nodo nuevo, NO la red entera
     deleteIfExists(DIR_NODE);
     createIfNotExists(DIR_NODE);
 
@@ -225,46 +225,38 @@ router.get("/reload/:network", (req, res) => {
     }
 
     const nodos = fs.readdirSync(NETWORK_DIR, { withFileTypes: true }).filter(i => !i.isFile());
-    
-    // 1. Leer configuraciones antiguas y matar procesos activos
-    const antiguosConfig = [];
+    const nuevosNodos = [];
+
     nodos.forEach(i => {
         try {
             const configPath = `${NETWORK_DIR}/${i.name}/paramsNodo.json`;
-            const data = JSON.parse(fs.readFileSync(configPath));
-            antiguosConfig.push(data);
-            killProcess(data.pid);
-        } catch (error) {}
-    });
+            if (fs.existsSync(configPath)) {
+                const configData = JSON.parse(fs.readFileSync(configPath));
+                
+                killProcess(configData.pid);
 
-    // 2. Generar el archivo static-nodes.json con enodes válidos
-    const enodes = antiguosConfig.map(item => {
-        try {
-            const nodekeyHex = fs.readFileSync(`${item.nodo.dir_node}/geth/nodekey`).toString().trim();
-            // Ejecución segura de bootnode en Linux
-            const addressStdout = spawnSync('bootnode', ['-nodekeyhex', nodekeyHex, '-writeaddress']);
-            const nodeAddress = addressStdout.stdout.toString().trim();
-            return `enode://${nodeAddress}@127.0.0.1:${item.nodo.port}?discport=0`;
-        } catch (e) {
-            return null;
+                const { network, nodo, dir_node, network_dir, ipcpath, chainId, http_port, address, port, authRpcPort, prefund } = configData.nodo;
+
+                const resultado = launchNode(
+                    network, nodo, dir_node, network_dir, ipcpath, 
+                    chainId, http_port, address, port, authRpcPort, prefund, []
+                );
+                nuevosNodos.push(resultado);
+            }
+        } catch (error) {
+            console.error(`Error de reinicio en nodo ${i.name}:`, error.message);
         }
-    }).filter(e => e !== null);
-
-        // Escribir static-nodes en cada uno de los nodos para forzar el Discovery manual
-    antiguosConfig.forEach(item => {
-        try {
-            fs.writeFileSync(`${item.nodo.dir_node}/static-nodes.json`, JSON.stringify(enodes, null, 4));
-        } catch (e) {}
     });
 
-    // 3. Relanzar todos los nodos
-    const relanzados = antiguosConfig.map(item => {
-        return launchNode(
-            item.nodo.network, item.nodo.nodo, item.nodo.dir_node, item.nodo.network_dir,
-            item.nodo.ipcpath, item.nodo.chainId, item.nodo.http_port, item.nodo.address,
-            item.nodo.port, item.nodo.authRpcPort, item.nodo.prefund, []
-        );
-    });
-
-    res.send({ status: "reloaded", nodes: relanzados });
+    res.send({ status: "reloaded", network: NUMERO_NETWORK, nodos: nuevosNodos });
 });
+
+router.get("/status", (req, res) => {
+    res.json({ 
+        status: "Online", 
+        timestamp: new Date(),
+        orchestrator: true 
+    });
+});
+
+module.exports = router;
