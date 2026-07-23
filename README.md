@@ -1,3 +1,24 @@
+# Nexus Web3 Payment Core 🚀🔗
+
+A high-performance, non-custodial fintech orchestrator built on Node.js and Ethereum Virtual Machine (EVM) architectures. This core system automates distributed ledger infrastructure provisioning and secures payment processing at an enterprise grade.
+
+## 🛠️ Core Capabilities
+
+- **JSON-RPC Architecture**: Direct programmatical connection to Go-Ethereum (Geth) nodes using the modern `ethers.js v6` specification for low-latency transaction routing.
+- **Advanced State & Math Management**: Native implementation of `BigInt` arithmetic to prevent logical overflows during massive data loads and high-volume balances.
+- **Provider Injection**: Decoupled backend architecture designed for seamless client-side wallet provider integrations (e.g., MetaMask BrowserProvider).
+- **Dockerized Web3 DevOps**: Containerized Geth execution environments optimized for Clique PoA (Proof of Authority) private consensus mechanisms.
+
+## 💻 Tech Stack
+
+- **Runtime**: Node.js (ES6+)
+- **Web3 Libraries**: Ethers.js v6
+- **Infrastructure**: Docker, Linux Unix Sockets IPC
+- **Frontend Compatibility**: React.js + Vite
+
+## 🚀 Architectural Alignment for Rental Platforms
+
+This payment core isolates transaction and escrow logic from the traditional database layers. It is fully architected to support features like **Automated Escrow Lockups**, **Tokenized Rewards (ERC-20)**, and **Instant Real-Time Micro-payments**, making it a perfect fit for decentralized property and leasing ecosystems.
 ## proyectos
 
 ### frontend (react)
