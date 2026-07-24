@@ -1,4 +1,4 @@
-# Nexus Web3 Payment Core 🚀🔗
+# Nexus Web3 Unified Payment Gateway & Ledger Orchestrator 🚀🔗🚀🔗
 
 A high-performance, non-custodial fintech orchestrator built on Node.js and Ethereum Virtual Machine (EVM) architectures. This core system automates distributed ledger infrastructure provisioning and secures payment processing at an enterprise grade.
 
