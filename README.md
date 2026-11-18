@@ -1,163 +1,29 @@
-# Nexus Web3 Unified Payment Gateway & Ledger Orchestrator 🚀🔗🚀🔗
+# Nexus Web3 Unified Payment
 
-A high-performance, non-custodial fintech orchestrator built on Node.js and Ethereum Virtual Machine (EVM) architectures. This core system automates distributed ledger infrastructure provisioning and secures payment processing at an enterprise grade.
+Orquestador de pagos **no custodial** sobre EVM: backend Node.js (ethers.js v6, BigInt) que gestiona una red Ethereum privada con Geth (consenso Clique PoA) y un frontend React + Vite.
 
-## 🛠️ Core Capabilities
+**Estado:** en desarrollo. Aún no incluye contratos desplegados ni pruebas automatizadas.
 
-- **JSON-RPC Architecture**: Direct programmatical connection to Go-Ethereum (Geth) nodes using the modern `ethers.js v6` specification for low-latency transaction routing.
-- **Advanced State & Math Management**: Native implementation of `BigInt` arithmetic to prevent logical overflows during massive data loads and high-volume balances.
-- **Provider Injection**: Decoupled backend architecture designed for seamless client-side wallet provider integrations (e.g., MetaMask BrowserProvider).
-- **Dockerized Web3 DevOps**: Containerized Geth execution environments optimized for Clique PoA (Proof of Authority) private consensus mechanisms.
+## Qué hace
+- Conecta por JSON-RPC a nodos Geth con ethers.js v6.
+- Usa aritmética BigInt para balances.
+- Crea y arranca nodos Geth desde `backend/router-network.js`.
+- Soporta un proveedor inyectado (por ejemplo MetaMask) en el frontend.
 
-## 💻 Tech Stack
-
-- **Runtime**: Node.js (ES6+)
-- **Web3 Libraries**: Ethers.js v6
-- **Infrastructure**: Docker, Linux Unix Sockets IPC
-- **Frontend Compatibility**: React.js + Vite
-
-## 🚀 Architectural Alignment for Rental Platforms
-
-This payment core isolates transaction and escrow logic from the traditional database layers. It is fully architected to support features like **Automated Escrow Lockups**, **Tokenized Rewards (ERC-20)**, and **Instant Real-Time Micro-payments**, making it a perfect fit for decentralized property and leasing ecosystems.
-## proyectos
-
-### frontend (react)
-
-
-### backend (nodejs)
-
-En la parte del backend tenemos que hacer operaciones crear borrar directorios.
-
-También se debe de lanzar procesos con parámetros y borrar procesos.
-
-```javascript
-const fs = require("fs")
-var argv = require('yargs').argv;
-const Web3 = require("Web3")
-const {execSync} = require("child_process")
-
-const NUMERO_NETWORK = parseInt(argv.network)
-const NUMERO_NODO = parseInt(argv.nodo)
-const NETWORK_DIR = `eth${NUMERO_NETWORK}`
-const NETWORK_CHAINID = 333444 + NUMERO_NETWORK
-const PASSWORD = "123456"
-
-const BALANCE = "0x200000000000000000000000000000000000000000000000000000000000000"
-
-
-
-const HTTP_PORT = 9545 + NUMERO_NODO + NUMERO_NETWORK * 20 
-const AUTHRPC_PORT = 9553 + NUMERO_NODO + NUMERO_NETWORK * 20 
-const NODO = `nodo${NUMERO_NODO}`
-const PORT = 30404 + NUMERO_NODO + NUMERO_NETWORK * 20 
-const IPCPATH = `\\\\.\\pipe\\${NETWORK_CHAINID}\\${NODO}.ipc`
-const DIR_NODE = `${NETWORK_DIR}/${NODO}`   
-
-
-if (!fs.existsSync(NETWORK_DIR))
-   fs.mkdirSync(NETWORK_DIR)
-
-if (fs.existsSync(`${NETWORK_DIR}/${NODO}`))
-   fs.rmSync(`${NETWORK_DIR}/${NODO}`, {recursive:true,})
-
-if (!fs.existsSync(`${NETWORK_DIR}/${NODO}`))
-   fs.mkdirSync(`${NETWORK_DIR}/${NODO}`)
-
-
-
-fs.writeFileSync(`${NETWORK_DIR}/${NODO}/pwd`,PASSWORD)
-execSync(`geth  --datadir ${DIR_NODE}  account new --password ${DIR_NODE}/pwd`)
-
-const lista = fs.readdirSync(`${DIR_NODE}/keystore`)
-const CUENTA = JSON.parse(fs.readFileSync(`${DIR_NODE}/keystore/${lista[0]}`).toString()).address
-
-const CUENTAS_ALLOC = [
-   "704765a908962e25626f2bea8cdf96c84dedaa0b"
-  // CUENTA
-]
-const timestamp = Math.round(((new Date()).getTime() / 1000)).toString(16)
-// leemos la plantilla del genesis
-let genesis = JSON.parse(fs.readFileSync('curso.json').toString())
-
-// genesis.timestamp = `0x${timestamp}`
-genesis.config.chainId = NETWORK_CHAINID 
-genesis.extraData = `0x${'0'.repeat(64)}${CUENTA}${'0'.repeat(130)}`
-
-
-genesis.alloc = CUENTAS_ALLOC.reduce((acc, item)  => {
-     acc[item] = {balance: BALANCE}
-     return acc
-}, {})
-
-
-fs.writeFileSync(`${NETWORK_DIR}/${NODO}/genesis.json`, JSON.stringify(genesis))
-
-// INICIALIZAMOS EL NODO
-const result = execSync(`geth --datadir ${DIR_NODE} init ${DIR_NODE}/genesis.json`)
-
-
-const comando = `--networkid ${NETWORK_CHAINID}
---miner.threads 2
---syncmode full
---mine
---miner.threads 2
---datadir ${DIR_NODE}
---http
---graphql
---http.port ${HTTP_PORT}
---http.api admin,eth,miner,net,txpool,personal,web3
---allow-insecure-unlock
---unlock "0x${CUENTA}"
---password ${DIR_NODE}/pwd
---port ${PORT}
---authrpc.port ${AUTHRPC_PORT} 
---ipcpath "${IPCPATH}"`
-
-const params = comando.replace("\n"," ").split(" ")
-
-
-const params2 = [
-   '--networkid',
-   NETWORK_CHAINID,
-   '--miner.threads',
-   2,
-   '--syncmode',
-   'full',
-   '--miner.gasprice',  0, 
-   
-   '--verbosity', 9,
-   
-   '--bootnodes',
-   'enode://c64aa5554df5961673455c6499a57f480ea220639bc3090894fa567f34a4dcf21f956998299962f09521abd4b594f6b4d722dc380a74277c9fbe1647214307bd@127.0.0.1:0?discport=30301',
-   '--datadir',   DIR_NODE,
-   '--http', 
-   '--http.corsdomain', '*',
-   '--graphql',
-   '--http.port', HTTP_PORT, 
-   '--http.api', 'admin,eth,miner,net,txpool,personal,web3',
-   '--allow-insecure-unlock',
-   '--unlock',  CUENTA,
-   '--password', `${DIR_NODE}/pwd`,
-   '--port',   PORT,
-   '--authrpc.port',   AUTHRPC_PORT,
-   '--ipcpath',  `\\\\.\\pipe\\${NETWORK_CHAINID}-${NODO}.ipc`
- ]
- 
-
-const { spawn } = require('child_process'); 
-const out = fs.openSync(`./${DIR_NODE}/out${NUMERO_NODO}.log`, 'a');
-const err = fs.openSync(`./${DIR_NODE}/out${NUMERO_NODO}.log`, 'a');
-const subproceso = spawn('geth', params2,{detached:true, stdio: ['ignore', out, err]});
-fs.writeFileSync(`${DIR_NODE}/params.json`, JSON.stringify(subproceso,null,4))
-subproceso.unref();
-
+## Arranque rápido (red local de desarrollo)
+```bash
+cd backend && npm install
+export GETH_PASSWORD="<elige-una-contraseña-local>"   # nunca la subas al repo
+node app.js
+cd ../frontend && npm install && npm run dev
 ```
 
-### borrar proceso en power shell
-```powershell
-param ($network)
-Get-Process -Name geth | Select-Object -property id | Stop-Process -Force; Remove-Item .\eth$network -Recurse
-```
-https://yenhuang.gitbooks.io/blockchain/content/interact-with-private-chain-on-android/build-the-private-chain.html# PrivateEthereumNetworks.
-# PrivateEthereumNetworks.
-# PrivateEthereumNetworks.
+## Seguridad
+- La contraseña de la cuenta de desarrollo se lee de `GETH_PASSWORD`; no hay credenciales en el código.
+- Es una red de desarrollo. No usar con fondos reales.
+
+## Hoja de ruta
+- [ ] Contrato de escrow con pruebas (Hardhat) y despliegue en Sepolia
+- [ ] Docker Compose para Geth + backend + frontend
+- [ ] CI con pruebas
+- [ ] Licencia (a elegir por el autor)
